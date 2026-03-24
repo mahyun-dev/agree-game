@@ -1,4 +1,4 @@
-const CACHE_VERSION = "agree-cache-v02";
+const CACHE_VERSION = "agree-cache-v02.1";
 const APP_SHELL = [
   "./",
   "./index.html",
