@@ -1,6 +1,7 @@
 import { STAGES } from "./stages.js";
 
-const APP_VERSION = "v2026.03.24-02";
+const APP_VERSION = "v2026.03.24-02.1";
+const STAGE_ADVANCE_DELAY_MS = 2400;
 
 const appRoot = document.getElementById("appRoot");
 const stageTitle = document.getElementById("stageTitle");
@@ -32,6 +33,7 @@ const state = {
   closedPopups: 0,
   resetting: false,
   timerId: null,
+  stageAdvanceTimerId: null,
   stageEndsAt: 0,
   deferredInstallPrompt: null,
   installBannerDismissed: false
@@ -99,6 +101,10 @@ function nextStage() {
 
 function clearStageEffects() {
   stopStageTimer();
+  if (state.stageAdvanceTimerId) {
+    clearTimeout(state.stageAdvanceTimerId);
+    state.stageAdvanceTimerId = null;
+  }
   state.cleanup.forEach((fn) => {
     try {
       fn();
@@ -142,7 +148,11 @@ function completeStage(nextHint) {
   if (nextHint) {
     setHint(nextHint);
   }
-  setTimeout(nextStage, 240);
+  setPrimaryButton("다음 스테이지 준비 중...", null, true, "btn--primary");
+  state.stageAdvanceTimerId = setTimeout(() => {
+    state.stageAdvanceTimerId = null;
+    nextStage();
+  }, STAGE_ADVANCE_DELAY_MS);
 }
 
 function startStageTimer(limitSec) {
