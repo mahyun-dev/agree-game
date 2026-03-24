@@ -249,7 +249,7 @@ function renderIntro() {
         <article class="card card--brief">
           <p class="hero-kicker">Best Play</p>
           <strong>${Number(localStorage.getItem(scoreKey) || "0") ? `${Number(localStorage.getItem(scoreKey) || "0")}초` : "아직 기록 없음"}</strong>
-          <p class="small">가장 빠른 기록은 좌측 패널에도 표시됩니다. 이번엔 더 날카롭게 통과해 보세요.</p>
+          <p class="small">최고 기록입니다. 다음엔 더 날카롭게 통과해 보세요.</p>
         </article>
       </div>
     </div>
