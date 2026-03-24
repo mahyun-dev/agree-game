@@ -1,5 +1,8 @@
 import { STAGES } from "./stages.js";
 
+const APP_VERSION = "v2026.03.24-3";
+
+const appRoot = document.getElementById("appRoot");
 const stageTitle = document.getElementById("stageTitle");
 const stageSubtitle = document.getElementById("stageSubtitle");
 const stageArea = document.getElementById("stageArea");
@@ -10,6 +13,21 @@ const difficultyLabel = document.getElementById("difficultyLabel");
 const progressWrap = document.querySelector(".progress-wrap");
 const stageChip = document.getElementById("stageChip");
 const timerChip = document.getElementById("timerChip");
+const recordValue = document.getElementById("recordValue");
+const missionValue = document.getElementById("missionValue");
+const threatValue = document.getElementById("threatValue");
+const splashScreen = document.getElementById("splashScreen");
+const splashVersion = document.getElementById("splashVersion");
+const versionBadge = document.getElementById("versionBadge");
+const installEyebrow = document.getElementById("installEyebrow");
+const installHeadline = document.getElementById("installHeadline");
+const installDescription = document.getElementById("installDescription");
+const installMetaPrefix = document.getElementById("installMetaPrefix");
+const installVersion = document.getElementById("installVersion");
+const installSteps = document.getElementById("installSteps");
+const installBanner = document.getElementById("installBanner");
+const installButton = document.getElementById("installButton");
+const dismissInstallButton = document.getElementById("dismissInstallButton");
 
 const state = {
   stageIndex: -1,
@@ -18,10 +36,13 @@ const state = {
   closedPopups: 0,
   resetting: false,
   timerId: null,
-  stageEndsAt: 0
+  stageEndsAt: 0,
+  deferredInstallPrompt: null,
+  installBannerDismissed: false
 };
 
 const scoreKey = "consent-game-best";
+const installStateKey = "consent-game-installed";
 
 const stageRenderers = {
   "checkbox-basic": renderStage1,
@@ -47,6 +68,7 @@ primaryButton.addEventListener("click", () => {
 function startGame() {
   state.resetting = false;
   state.startedAt = Date.now();
+  missionValue.textContent = String(STAGES.length);
   goToStage(0);
 }
 
@@ -54,15 +76,18 @@ function goToStage(index) {
   clearStageEffects();
   state.stageIndex = index;
   const stage = STAGES[index];
+  appRoot.dataset.screen = "stage";
+  stageArea.dataset.mechanic = stage.mechanic;
   stageTitle.textContent = stage.title;
   stageSubtitle.textContent = stage.subtitle;
   setHint(stage.hint);
   difficultyLabel.textContent = `난이도 ${stage.id}/12`;
-  stageChip.textContent = `Stage ${stage.id}`;
+  stageChip.textContent = `제${stage.id}조`;
   progressWrap.setAttribute("aria-valuenow", String(stage.id));
   progressWrap.setAttribute("aria-valuemax", String(STAGES.length));
   progressBar.style.width = `${(stage.id / STAGES.length) * 100}%`;
   stageArea.innerHTML = "";
+  setThreat("active", stage.id >= 9 ? "Crimson" : "Amber");
   setPrimaryButton("동의하고 진행", null, true, "btn--primary");
   startStageTimer(stage.timeLimit);
   const renderer = stageRenderers[stage.mechanic];
@@ -89,6 +114,16 @@ function clearStageEffects() {
   stageArea.classList.remove("glitch");
 }
 
+function setThreat(level, label) {
+  appRoot.dataset.threat = level;
+  threatValue.textContent = label;
+}
+
+function syncBestRecord() {
+  const best = Number(localStorage.getItem(scoreKey) || "0");
+  recordValue.textContent = best ? `${best}s` : "--";
+}
+
 function addCleanup(fn) {
   state.cleanup.push(fn);
 }
@@ -101,11 +136,13 @@ function setPrimaryButton(label, onClick, disabled, variant) {
   primaryButton.textContent = label;
   primaryButton.className = `btn ${variant}`;
   primaryButton.disabled = disabled;
+  primaryButton.dataset.variant = variant;
   primaryButton.onclick = onClick;
 }
 
 function completeStage(nextHint) {
   stopStageTimer();
+  setThreat("success", "Cleared");
   tone(680, 0.05, "triangle", 0.04);
   if (nextHint) {
     setHint(nextHint);
@@ -118,6 +155,7 @@ function startStageTimer(limitSec) {
   if (!limitSec || limitSec <= 0) {
     timerChip.textContent = "시간 제한 없음";
     timerChip.classList.remove("danger");
+    setThreat("idle", "Stable");
     return;
   }
 
@@ -129,8 +167,10 @@ function startStageTimer(limitSec) {
     timerChip.textContent = `남은 시간 ${remain.toFixed(1)}초`;
     if (remain <= 5) {
       timerChip.classList.add("danger");
+      setThreat("danger", "Critical");
     } else {
       timerChip.classList.remove("danger");
+      setThreat("active", remain <= 9 ? "High" : "Amber");
     }
 
     if (remain <= 0) {
@@ -156,6 +196,8 @@ function failGame(reason) {
 
   state.resetting = true;
   clearStageEffects();
+  appRoot.dataset.screen = "failure";
+  setThreat("failure", "Locked");
   stageArea.innerHTML = `
     <div class="card result">
       <strong>실패</strong>
@@ -171,6 +213,55 @@ function failGame(reason) {
   setTimeout(() => {
     startGame();
   }, 1000);
+}
+
+function renderIntro() {
+  state.stageIndex = -1;
+  appRoot.dataset.screen = "intro";
+  stageArea.dataset.mechanic = "intro";
+  stageTitle.textContent = "Consent Crisis";
+  stageSubtitle.textContent = "12개의 기만적인 동의 절차를 제한 시간 안에 돌파하는 아케이드 서바이벌.";
+  difficultyLabel.textContent = "브리핑 대기";
+  stageChip.textContent = "서문";
+  timerChip.textContent = "시스템 대기 중";
+  timerChip.classList.remove("danger");
+  progressWrap.setAttribute("aria-valuenow", "0");
+  progressWrap.setAttribute("aria-valuemax", String(STAGES.length));
+  progressBar.style.width = "0%";
+  missionValue.textContent = String(STAGES.length);
+  syncBestRecord();
+  setThreat("idle", "Amber");
+  setHint("시작 버튼을 누르면 12개의 동의 함정이 순서대로 활성화됩니다.");
+  stageArea.innerHTML = `
+    <div class="intro-screen">
+      <div class="intro-screen__hero card card--hero">
+        <p class="hero-kicker">MISSION BRIEFING</p>
+        <h2>읽는 게임이 아니라, 버티는 게임.</h2>
+        <p>
+          체크박스, 약관 카드, 함정 버튼, 팝업 폭주가 연속으로 몰아칩니다.
+          매 스테이지는 다른 방식으로 당신의 집중력을 흔들고, 한 번의 실수는 전체 리셋으로 이어집니다.
+        </p>
+        <div class="hero-tags">
+          <span class="hero-tag">12 STAGES</span>
+          <span class="hero-tag">TIME ATTACK</span>
+          <span class="hero-tag">NO MERCY RESET</span>
+        </div>
+      </div>
+      <div class="intro-screen__grid">
+        <article class="card card--brief">
+          <p class="hero-kicker">Objective</p>
+          <strong>모든 동의 함정을 뚫고 최종 선택에 도달하세요.</strong>
+          <p class="small">체크, 스크롤, 기억, 정렬, 회피, 홀드 입력까지 모든 감각을 사용해야 합니다.</p>
+        </article>
+        <article class="card card--brief">
+          <p class="hero-kicker">Best Play</p>
+          <strong>${Number(localStorage.getItem(scoreKey) || "0") ? `${Number(localStorage.getItem(scoreKey) || "0")}초` : "아직 기록 없음"}</strong>
+          <p class="small">가장 빠른 기록은 좌측 패널에도 표시됩니다. 이번엔 더 날카롭게 통과해 보세요.</p>
+        </article>
+      </div>
+    </div>
+  `;
+  setPrimaryButton("미션 시작", null, false, "btn--primary");
 }
 
 function vibrate(pattern) {
@@ -197,381 +288,702 @@ function tone(freq, duration, wave = "sine", volume = 0.02) {
   setTimeout(() => ctx.close(), duration * 1000 + 80);
 }
 
+function shuffleArray(items) {
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+}
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomChoice(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function syncVersionLabels() {
+  splashVersion.textContent = APP_VERSION;
+  versionBadge.textContent = APP_VERSION;
+  installVersion.textContent = APP_VERSION;
+}
+
+function hideSplashScreen() {
+  splashScreen.classList.add("hidden");
+  const removeTimer = setTimeout(() => {
+    splashScreen.hidden = true;
+  }, 420);
+  addCleanup(() => clearTimeout(removeTimer));
+}
+
+function isStandaloneMode() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+function isIPhoneDevice() {
+  const userAgent = window.navigator.userAgent || "";
+  return /iPhone/i.test(userAgent);
+}
+
+function isSafariBrowser() {
+  const userAgent = window.navigator.userAgent || "";
+  return /Safari/i.test(userAgent) && !/(CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|YaBrowser)/i.test(userAgent);
+}
+
+function isInstalledApp() {
+  if (isStandaloneMode()) {
+    localStorage.setItem(installStateKey, "1");
+    return true;
+  }
+
+  return localStorage.getItem(installStateKey) === "1";
+}
+
+function setInstallSteps(items) {
+  installSteps.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
+}
+
+function applyInstallBannerMode(mode) {
+  installBanner.dataset.mode = mode;
+
+  if (mode === "iphone") {
+    installEyebrow.textContent = "IPHONE QUICK INSTALL";
+    installHeadline.textContent = "홈 화면에 추가하면 앱처럼 바로 실행됩니다.";
+    installDescription.textContent = "iPhone Safari에서는 설치 버튼 대신 공유 메뉴에서 홈 화면에 추가를 선택해야 합니다.";
+    installMetaPrefix.textContent = "iPhone build";
+    setInstallSteps([
+      "Safari 하단의 공유 버튼을 누르세요.",
+      "홈 화면에 추가를 선택하세요.",
+      "추가를 누르면 다음 실행부터 배너가 사라집니다."
+    ]);
+    installSteps.hidden = false;
+    installButton.hidden = true;
+    dismissInstallButton.textContent = "닫기";
+    return;
+  }
+
+  if (mode === "iphone-browser") {
+    installEyebrow.textContent = "IPHONE INSTALL";
+    installHeadline.textContent = "Safari에서 열어야 홈 화면 설치가 가능합니다.";
+    installDescription.textContent = "현재 브라우저에서는 설치 메뉴가 제한됩니다. Safari로 연 뒤 홈 화면에 추가를 진행하세요.";
+    installMetaPrefix.textContent = "iPhone build";
+    setInstallSteps([
+      "이 페이지를 Safari에서 다시 여세요.",
+      "Safari 공유 버튼을 누르세요.",
+      "홈 화면에 추가를 선택하세요."
+    ]);
+    installSteps.hidden = false;
+    installButton.hidden = true;
+    dismissInstallButton.textContent = "닫기";
+    return;
+  }
+
+  installEyebrow.textContent = "설치 권장";
+  installHeadline.textContent = "앱으로 설치하면 전체 화면으로 더 빠르게 실행됩니다.";
+  installDescription.textContent = "오프라인 실행, 자동 업데이트, 홈 화면 바로가기를 지원합니다.";
+  installMetaPrefix.textContent = "빌드";
+  installSteps.hidden = true;
+  installSteps.innerHTML = "";
+  installButton.hidden = false;
+  dismissInstallButton.textContent = "나중에";
+}
+
+function updateInstallBannerVisibility() {
+  const installed = isInstalledApp();
+  const iPhone = isIPhoneDevice();
+  const safari = isSafariBrowser();
+
+  let mode = "hidden";
+  if (!installed) {
+    if (iPhone && safari) {
+      mode = "iphone";
+    } else if (iPhone) {
+      mode = "iphone-browser";
+    } else if (state.deferredInstallPrompt) {
+      mode = "prompt";
+    }
+  }
+
+  const visible = mode !== "hidden" && !state.installBannerDismissed;
+  applyInstallBannerMode(mode === "hidden" ? "prompt" : mode);
+  installBanner.hidden = !visible;
+  installBanner.classList.toggle("show", visible);
+}
+
+function setupInstallPrompt() {
+  installButton.addEventListener("click", async () => {
+    if (!state.deferredInstallPrompt || installButton.hidden) {
+      return;
+    }
+
+    const promptEvent = state.deferredInstallPrompt;
+    state.deferredInstallPrompt = null;
+    promptEvent.prompt();
+    await promptEvent.userChoice.catch(() => null);
+    updateInstallBannerVisibility();
+  });
+
+  dismissInstallButton.addEventListener("click", () => {
+    state.installBannerDismissed = true;
+    updateInstallBannerVisibility();
+  });
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    state.deferredInstallPrompt = event;
+    state.installBannerDismissed = false;
+    updateInstallBannerVisibility();
+  });
+
+  window.addEventListener("appinstalled", () => {
+    state.deferredInstallPrompt = null;
+    localStorage.setItem(installStateKey, "1");
+    updateInstallBannerVisibility();
+  });
+
+  window.addEventListener("pageshow", updateInstallBannerVisibility);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      updateInstallBannerVisibility();
+    }
+  });
+
+  updateInstallBannerVisibility();
+}
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  let refreshing = false;
+
+  const activateWaitingWorker = (worker) => {
+    if (!worker) {
+      return;
+    }
+    worker.postMessage({ type: "SKIP_WAITING" });
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) {
+      return;
+    }
+    refreshing = true;
+    window.location.reload();
+  });
+
+  try {
+    const registration = await navigator.serviceWorker.register("./service-worker.js", {
+      scope: "./"
+    });
+
+    if (registration.waiting) {
+      activateWaitingWorker(registration.waiting);
+    }
+
+    registration.addEventListener("updatefound", () => {
+      const newWorker = registration.installing;
+      if (!newWorker) {
+        return;
+      }
+
+      newWorker.addEventListener("statechange", () => {
+        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+          activateWaitingWorker(newWorker);
+        }
+      });
+    });
+
+    const refreshRegistration = () => registration.update().catch(() => {});
+    setInterval(refreshRegistration, 60 * 1000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        refreshRegistration();
+      }
+    });
+  } catch {
+    return;
+  }
+}
+
+function lockViewportZoom() {
+  let lastTouchEnd = 0;
+
+  document.addEventListener("gesturestart", (event) => {
+    event.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener("gesturechange", (event) => {
+    event.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener("gestureend", (event) => {
+    event.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener("touchend", (event) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      event.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+
+  window.addEventListener("wheel", (event) => {
+    if (event.ctrlKey) {
+      event.preventDefault();
+    }
+  }, { passive: false });
+}
+
 function renderStage1() {
+  const target = shuffleArray([true, true, false, true]);
+
   stageArea.innerHTML = `
     <div class="card">
-      <label class="checkbox-row"><input type="checkbox" data-required="1">위치 정보 수집 및 이용에 동의합니다.</label>
-      <label class="checkbox-row"><input type="checkbox" data-required="1">이상 행동 탐지를 위한 로그 저장에 동의합니다.</label>
-      <label class="checkbox-row"><input type="checkbox" data-required="1">서비스 품질 향상을 위한 분석 데이터 이용에 동의합니다.</label>
-      <label class="checkbox-row"><input type="checkbox" data-required="1">보안 검증을 위한 익명 디바이스 지문 처리에 동의합니다.</label>
-      <p class="small">필수 항목을 모두 체크해야 진행할 수 있습니다.</p>
+      <p>시스템이 1.8초 동안 승인 패턴을 보여줍니다. 같은 상태로 스위치를 맞추세요.</p>
+      <div class="badge" id="switchBrief">${target.map((value) => (value ? "ON" : "OFF")).join(" · ")}</div>
+      <div class="switch-grid" id="switchGrid"></div>
+      <p class="small" id="switchStateText">패턴을 기억한 뒤 스위치를 맞추면 자동으로 통과합니다.</p>
     </div>
   `;
 
-  const required = [...stageArea.querySelectorAll("input[data-required='1']")];
-  const validate = () => {
-    const allChecked = required.every((item) => item.checked);
-    setPrimaryButton("동의하고 진행", () => completeStage("약관을 읽고 정답을 맞혀야 합니다."), !allChecked, "btn--primary");
-  };
+  const switchGrid = document.getElementById("switchGrid");
+  const switchBrief = document.getElementById("switchBrief");
+  const switchStateText = document.getElementById("switchStateText");
+  const current = Array.from({ length: 4 }, () => false);
 
-  required.forEach((box) => box.addEventListener("change", validate));
-  validate();
+  current.forEach((_, index) => {
+    const button = document.createElement("button");
+    button.className = "switch-tile";
+    button.type = "button";
+    button.textContent = `채널 ${index + 1} · OFF`;
+    button.addEventListener("click", () => {
+      current[index] = !current[index];
+      button.classList.toggle("active", current[index]);
+      button.textContent = `채널 ${index + 1} · ${current[index] ? "ON" : "OFF"}`;
+      tone(current[index] ? 520 : 260, 0.03, "triangle", 0.025);
+      const matched = current.every((value, currentIndex) => value === target[currentIndex]);
+      switchStateText.textContent = `${current.filter(Boolean).length}/4 채널 활성화`;
+      if (matched) {
+        completeStage("숨겨진 승인 문서를 찾아야 합니다.");
+      }
+    });
+    switchGrid.appendChild(button);
+  });
+
+  const briefTimer = setTimeout(() => {
+    switchBrief.textContent = "패턴 숨김";
+  }, 1800);
+  addCleanup(() => clearTimeout(briefTimer));
+  setPrimaryButton("스위치 패턴 일치 필요", null, true, "btn--ghost");
 }
 
 function renderStage2() {
+  const dossierCount = 9;
+  const targetId = randomInt(0, dossierCount - 1);
+  let scanCount = 0;
+
   stageArea.innerHTML = `
-    <div class="card" data-card="0">
-      <button class="btn btn--ghost" type="button">약관 1 펼치기</button>
-      <p class="small" hidden>
-        수집 목적: 서비스 제공 및 품질 개선을 위한 최소 데이터 처리.<br>
-        이용자의 접속 안정성, 오류 재현, 악성 행위 탐지를 위해 세션 로그가 생성될 수 있습니다.<br>
-        생성되는 로그에는 기능 호출 순서, 비정상 종료 여부, 화면 전환 정보가 포함될 수 있으며,
-        계정 식별 정보는 해시 처리된 내부 키로 대체됩니다.
-      </p>
-    </div>
-    <div class="card" data-card="1">
-      <button class="btn btn--ghost" type="button">약관 2 펼치기</button>
-      <p class="small" hidden>
-        보관 기간: 12개월.<br>
-        장애 대응 및 보안 점검을 위해 수집된 운영 로그는 최대 12개월 동안 암호화 저장됩니다.<br>
-        보관 기간 종료 시 복구 불가능한 방식으로 파기하며,
-        법령상 추가 보관 의무가 없는 항목은 자동 삭제 정책에 따라 즉시 제거됩니다.
-      </p>
-    </div>
-    <div class="card" data-card="2">
-      <button class="btn btn--ghost" type="button">약관 3 펼치기</button>
-      <p class="small" hidden>
-        제3자 제공: 없음.<br>
-        원칙적으로 외부 사업자에게 개인정보를 판매하거나 제공하지 않습니다.<br>
-        다만 인프라 보안 점검, 침해 대응, 법적 의무 이행을 위해
-        비식별 통계 형태의 정보가 내부 위탁 환경에서 제한적으로 처리될 수 있습니다.
-      </p>
-    </div>
     <div class="card">
-      <p class="small">질문: 보관 기간은 몇 개월인가요?</p>
-      <input id="quizInput" class="input" inputmode="numeric" placeholder="숫자 입력">
+      <p>봉인된 문서 9개 중 하나에만 진짜 승인 문서가 있습니다. 잘못 열면 위치가 다시 섞입니다.</p>
+      <div class="dossier-grid" id="dossierGrid"></div>
+      <p class="small" id="dossierHint">스캔 횟수 0회</p>
     </div>
   `;
 
-  const viewed = new Set();
-  const cards = [...stageArea.querySelectorAll("[data-card]")];
-  const quizInput = document.getElementById("quizInput");
+  const dossierGrid = document.getElementById("dossierGrid");
+  const dossierHint = document.getElementById("dossierHint");
 
-  const validate = () => {
-    const ready = viewed.size === 3 && quizInput.value.trim() === "12";
-    setPrimaryButton("모두 확인하고 동의", () => completeStage("이제 스크롤 구간입니다."), !ready, "btn--primary");
+  const renderDossiers = () => {
+    const order = shuffleArray(Array.from({ length: dossierCount }, (_, index) => index));
+    dossierGrid.innerHTML = "";
+    order.forEach((id) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "dossier-card";
+      button.innerHTML = `<span>문서 ${String(id + 1).padStart(2, "0")}</span><strong>SEALED</strong>`;
+      button.addEventListener("click", () => {
+        if (id === targetId) {
+          button.classList.add("dossier-card--real");
+          button.innerHTML = `<span>문서 ${String(id + 1).padStart(2, "0")}</span><strong>진짜 동의 발견</strong>`;
+          tone(640, 0.06, "triangle", 0.03);
+          completeStage("이제 타이밍 맞춰 시스템을 동기화하세요.");
+          return;
+        }
+
+        scanCount += 1;
+        dossierHint.textContent = `헛스캔 ${scanCount}회 · 위치 재배열 중`;
+        tone(180, 0.05, "sawtooth", 0.03);
+        button.classList.add("dossier-card--empty");
+        button.innerHTML = `<span>문서 ${String(id + 1).padStart(2, "0")}</span><strong>빈 서류</strong>`;
+        const reshuffleTimer = setTimeout(renderDossiers, 220);
+        addCleanup(() => clearTimeout(reshuffleTimer));
+      });
+      dossierGrid.appendChild(button);
+    });
   };
 
-  cards.forEach((card) => {
-    const button = card.querySelector("button");
-    const text = card.querySelector("p");
-    button.addEventListener("click", () => {
-      text.hidden = false;
-      viewed.add(card.dataset.card);
-      button.textContent = "확인 완료";
-      button.disabled = true;
-      tone(360, 0.03, "square", 0.015);
-      validate();
-    });
-  });
-
-  quizInput.addEventListener("input", validate);
-  quizInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && quizInput.value.trim() !== "12") {
-      failGame("정답 입력 실패");
-    }
-  });
-  validate();
+  renderDossiers();
+  setPrimaryButton("문서 직접 스캔 필요", null, true, "btn--ghost");
 }
 
 function renderStage3() {
   stageArea.innerHTML = `
     <div class="card">
-      <div class="scroll-box" id="scrollBox">
-        <p>제1조(목적) 본 약관은 서비스 이용과 관련하여 운영자와 이용자 간 권리·의무 및 책임사항을 규정함을 목적으로 합니다.</p>
-        <p>제2조(정의) 본 약관에서 사용하는 용어의 정의는 서비스 화면 내 고지사항 및 관련 정책을 따릅니다.</p>
-        <p id="textMorph">제3조(이용자 의무) 이용자는 비정상 자동화 행위, 시스템 우회, 타인 계정 도용을 시도해서는 안 됩니다.</p>
-        <p>제4조(서비스 제공) 운영자는 안정적인 제공을 위해 서버 점검, 장애 대응, 보안 업데이트를 수시로 수행할 수 있습니다.</p>
-        <p>제5조(로그 처리) 서비스 품질 향상 및 침해 사고 대응 목적으로 접속 이력, 오류 코드, 기능 호출 기록이 생성될 수 있습니다.</p>
-        <p>제6조(보관 및 파기) 처리된 로그는 목적 달성 시 또는 보관 기간 종료 시 지체 없이 삭제하며, 복구 불가 방식으로 파기합니다.</p>
-        <p>제7조(권한 요청) 일부 기능은 알림, 저장소, 카메라 등 단말 권한이 필요할 수 있으며, 이용자는 이를 거부할 수 있습니다.</p>
-        <p>제8조(거부 시 제한) 단, 필수 권한 또는 필수 정보 제공이 거부되는 경우 일부 서비스 이용이 제한될 수 있습니다.</p>
-        <p>제9조(약관 변경) 운영자는 관련 법령을 위반하지 않는 범위에서 본 약관을 변경할 수 있고, 변경사항은 사전 고지됩니다.</p>
-        <p>제10조(면책) 천재지변, 국가 비상사태, 기간통신사업자 장애 등 불가항력 사유로 인한 손해에 대하여 책임이 제한될 수 있습니다.</p>
-        <p>제11조(분쟁 해결) 서비스 이용 중 발생한 분쟁은 관련 법령 및 상호 협의 원칙에 따라 해결을 시도합니다.</p>
-        <p>부칙(시행일) 본 약관은 고지된 시행일부터 적용됩니다. 이용자는 최신 약관을 정기적으로 확인해야 합니다.</p>
-        <p>추가 안내 1) 본 구간은 스크롤 완료 검증을 위해 전체 본문을 끝까지 읽어야 다음 단계로 진행할 수 있습니다.</p>
-        <p>추가 안내 2) 본문 내 일부 문장은 보안 점검 단계에서 동적으로 변경될 수 있으며, 이는 연출의 일부입니다.</p>
-        <p>추가 안내 3) 이용자가 동의 버튼을 누르는 시점의 정책 버전이 적용되며, 이후 변경사항은 별도 고지됩니다.</p>
-        <p>추가 안내 4) 문의가 필요한 경우 고객센터 채널을 통해 접수할 수 있으며, 처리 순서에 따라 응답이 이루어집니다.</p>
-        <p>제12조(계정 보안) 이용자는 비밀번호 및 인증 수단을 스스로 관리해야 하며, 제3자에게 공유하거나 노출해서는 안 됩니다.</p>
-        <p>제13조(접근 통제) 시스템 보안을 위해 비정상 로그인 시도, 반복 요청, 자동화 패턴은 일시 차단될 수 있습니다.</p>
-        <p>제14조(서비스 중단) 정기 점검, 긴급 복구, 네트워크 장애가 발생한 경우 서비스는 예고 없이 제한 또는 중단될 수 있습니다.</p>
-        <p>제15조(데이터 무결성) 운영자는 데이터 무결성 유지를 위해 백업, 복제, 검증 절차를 수행하며 일부 지연이 발생할 수 있습니다.</p>
-        <p>제16조(정책 우선순위) 본 약관과 개별 정책 간 충돌이 발생할 경우, 개별 화면에 명시된 정책이 우선 적용될 수 있습니다.</p>
-        <p>제17조(알림 수신) 중요 고지, 보안 공지, 서비스 변경 사항은 앱 내 알림 또는 등록된 채널로 전달될 수 있습니다.</p>
-        <p>제18조(기록 열람) 이용자는 관련 법령에 따라 본인 데이터의 열람, 정정, 삭제를 요청할 수 있습니다.</p>
-        <p>제19조(요청 처리 기간) 데이터 관련 요청은 접수 후 영업일 기준 순차 처리되며, 처리 상황은 단계별로 안내됩니다.</p>
-        <p>제20조(금지 행위) 부정 접속, 악성 스크립트 삽입, 비인가 API 호출, 서비스 과부하 유발 행위는 금지됩니다.</p>
-        <p>제21조(제재 조치) 금지 행위 확인 시 접근 제한, 기능 정지, 계정 잠금 등 단계적 제재가 적용될 수 있습니다.</p>
-        <p>제22조(오탐 처리) 오탐으로 제한된 이용자는 소명 절차를 통해 해제 요청을 할 수 있으며, 검토 후 복구됩니다.</p>
-        <p>제23조(통계 처리) 서비스 개선을 위한 통계는 개인 식별이 불가능한 비식별·집계 형태로만 활용됩니다.</p>
-        <p>제24조(기능 실험) 일부 이용자에게 실험 기능이 제한적으로 노출될 수 있으며, 결과에 따라 기본 정책이 조정될 수 있습니다.</p>
-        <p>제25조(시스템 공지) 서비스 안정성 확보를 위해 화면 경고, 확인 절차, 재인증 요청이 임시로 표시될 수 있습니다.</p>
-        <p>제26조(권리 귀속) 서비스 내 UI/콘텐츠/로직 등 지식재산권은 운영자 또는 정당한 권리자에게 귀속됩니다.</p>
-        <p>제27조(이용 제한 지역) 법령 또는 규제 요구에 따라 특정 지역·국가에서는 일부 기능 사용이 제한될 수 있습니다.</p>
-        <p>제28조(운영 기록) 안정성 분석을 위해 운영 이벤트 타임라인이 생성되며, 사고 분석 후 일정 기간 보관됩니다.</p>
-        <p>제29조(비상 대응) 보안 사고가 감지되면 일부 기능이 즉시 잠금 상태로 전환되고, 이용자에게 공지될 수 있습니다.</p>
-        <p>제30조(권한 재검증) 장기 미사용 또는 위험 신호 감지 시, 기존 권한은 재검증 절차를 통해 갱신될 수 있습니다.</p>
-        <p>제31조(버전 관리) 약관 버전, 개정 이력, 적용 일자는 관리 페이지에서 확인할 수 있습니다.</p>
-        <p>제32조(보존 예외) 관계 법령이 정한 보존 의무 항목은 해당 기간 동안 별도 보관 후 안전하게 파기됩니다.</p>
-        <p>제33조(서비스 품질) 네트워크 환경, 단말 성능, 외부 인프라 상태에 따라 응답 지연 또는 체감 성능 차이가 발생할 수 있습니다.</p>
-        <p>제34조(기술 지원) 운영자는 오류 재현을 위해 이용 환경 정보 제출을 요청할 수 있으며, 제출 여부는 이용자 선택입니다.</p>
-        <p>제35조(연속 동의 검증) 특정 단계에서는 스크롤 완료, 확인 입력, 재인증 등 복합 조건이 동시에 요구될 수 있습니다.</p>
-        <p>제36조(주의) 하단까지 도달하기 전에는 동의 절차가 완료되지 않으며, 중간 이탈 시 진행 기록이 무효화될 수 있습니다.</p>
-        <p>제37조(끝) 여기까지 스크롤했다면 최종 문단 확인이 완료됩니다. 이제 동의 버튼이 활성화됩니다.</p>
+      <p>움직이는 마커가 초록 구간에 들어올 때 동기화 버튼을 눌러 3번 성공시키세요. 한 번이라도 빗나가면 실패입니다.</p>
+      <div class="sync-console">
+        <div class="sync-track">
+          <div class="sync-zone" id="syncZone"></div>
+          <div class="sync-marker" id="syncMarker"></div>
+        </div>
+        <div class="sync-status" id="syncStatus">동기화 성공 0/3</div>
+      </div>
+      <div class="action-row" style="margin-top:12px;">
+        <button class="btn btn--primary" id="syncButton" type="button">동기화</button>
       </div>
     </div>
   `;
 
-  const scrollBox = document.getElementById("scrollBox");
-  const textMorph = document.getElementById("textMorph");
-  let morphed = false;
+  const syncZone = document.getElementById("syncZone");
+  const syncMarker = document.getElementById("syncMarker");
+  const syncStatus = document.getElementById("syncStatus");
+  const syncButton = document.getElementById("syncButton");
+  let position = 0;
+  let velocity = 1.5;
+  let hitCount = 0;
+  let zoneStart = 28;
+  const zoneWidth = 18;
 
-  const handleScroll = () => {
-    const ratio = (scrollBox.scrollTop + scrollBox.clientHeight) / scrollBox.scrollHeight;
-    if (!morphed && ratio > 0.55) {
-      morphed = true;
-      textMorph.textContent = '제3조(경고) "뒤를 보지 마세요."';
-      textMorph.classList.add("glitch");
-      tone(200, 0.16, "sawtooth", 0.03);
-      vibrate([80, 40, 80]);
-      setHint("텍스트가 변했습니다. 끝까지 내려야 버튼이 열립니다.");
-    }
-    const atBottom = ratio >= 0.99;
-    setPrimaryButton("읽고 동의", () => completeStage("이중 코드 입력 구간입니다."), !atBottom, "btn--primary");
+  const updateZone = () => {
+    zoneStart = randomInt(12, 68);
+    syncZone.style.left = `${zoneStart}%`;
+    syncZone.style.width = `${zoneWidth}%`;
   };
 
-  scrollBox.addEventListener("scroll", handleScroll);
-  handleScroll();
+  updateZone();
+
+  const intervalId = setInterval(() => {
+    position += velocity;
+    if (position >= 96 || position <= 0) {
+      velocity *= -1;
+      position = Math.max(0, Math.min(96, position));
+    }
+    syncMarker.style.left = `${position}%`;
+  }, 16);
+
+  syncButton.addEventListener("click", () => {
+    const inZone = position >= zoneStart && position <= zoneStart + zoneWidth;
+    if (!inZone) {
+      failGame("동기화 타이밍을 놓쳤습니다.");
+      return;
+    }
+
+    hitCount += 1;
+    syncStatus.textContent = `동기화 성공 ${hitCount}/3`;
+    tone(520 + hitCount * 60, 0.04, "triangle", 0.03);
+    if (hitCount >= 3) {
+      completeStage("왜곡된 단어 조각을 복원하세요.");
+      return;
+    }
+    updateZone();
+  });
+
+  addCleanup(() => clearInterval(intervalId));
+  setPrimaryButton("패널 내부 버튼으로 진행", null, true, "btn--ghost");
 }
 
 function renderStage4() {
-  const code = String(1000 + Math.floor(Math.random() * 9000));
-  const reverseCode = code.split("").reverse().join("");
+  const targets = shuffleArray([
+    "필수",
+    "로그",
+    "암호화",
+    "동의",
+    "마케팅",
+    "연락처",
+    "상시",
+    "공유",
+    "광고"
+  ]);
+  const answer = ["필수", "로그", "암호화", "동의"];
+  let progress = 0;
+
   stageArea.innerHTML = `
     <div class="card">
-      <p class="glitch">확인 코드 <strong>${code}</strong>를 기억하세요.</p>
-      <p class="small">1차는 원본, 2차는 역순 코드입니다.</p>
-      <input class="input" id="codeInput" inputmode="numeric" maxlength="4" placeholder="1차 코드 입력">
-      <input class="input" id="codeInput2" inputmode="numeric" maxlength="4" placeholder="2차(역순) 코드 입력">
-      <div class="action-row" style="margin-top:10px;">
-        <button class="btn btn--ghost" id="verifyBtn" type="button">코드 확인</button>
-      </div>
+      <p>진짜 승인 문장을 복원하세요. 올바른 순서는 <strong>필수 → 로그 → 암호화 → 동의</strong> 입니다.</p>
+      <div class="fragment-grid" id="fragmentGrid"></div>
+      <p class="small" id="fragmentStatus">복원 진행 0/4</p>
     </div>
   `;
 
-  const codeInput = document.getElementById("codeInput");
-  const codeInput2 = document.getElementById("codeInput2");
-  const verifyBtn = document.getElementById("verifyBtn");
-  verifyBtn.addEventListener("click", () => {
-    if (codeInput.value.trim() === code && codeInput2.value.trim() === reverseCode) {
-      completeStage("버튼이 더 빠르게 도망갑니다.");
-      return;
-    }
-    failGame("코드가 일치하지 않습니다.");
+  const fragmentGrid = document.getElementById("fragmentGrid");
+  const fragmentStatus = document.getElementById("fragmentStatus");
+  targets.forEach((word) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "fragment-chip";
+    button.textContent = word;
+    button.addEventListener("click", () => {
+      if (word !== answer[progress]) {
+        failGame("왜곡된 문장을 잘못 선택했습니다.");
+        return;
+      }
+
+      progress += 1;
+      button.disabled = true;
+      button.classList.add("fragment-chip--ok");
+      fragmentStatus.textContent = `복원 진행 ${progress}/4`;
+      tone(420 + progress * 70, 0.04, "triangle", 0.03);
+      if (progress >= answer.length) {
+        completeStage("이제 동의 두더지를 잡아야 합니다.");
+      }
+    });
+    fragmentGrid.appendChild(button);
   });
-  setPrimaryButton("코드 확인 필요", null, true, "btn--ghost");
+
+  setPrimaryButton("단어 조각 선택 필요", null, true, "btn--ghost");
 }
 
 function renderStage5() {
   stageArea.innerHTML = `
     <div class="card">
-      <p>동의 버튼을 네 번 클릭하면 통과합니다.</p>
-      <div class="evasive-zone" id="zone">
-        <button id="evasiveBtn" class="btn btn--primary evasive" type="button">동의</button>
-      </div>
-      <p class="small">포획 횟수: <span id="catchCount">0</span>/4</p>
+      <p>동의 버튼이 구멍 사이를 튑니다. 6번 포착하면 통과하지만, 붉은 "거절"을 누르면 즉시 실패합니다.</p>
+      <div class="mole-grid" id="moleGrid"></div>
+      <p class="small" id="moleStatus">포착 0/6</p>
     </div>
   `;
 
-  const zone = document.getElementById("zone");
-  const btn = document.getElementById("evasiveBtn");
-  const catchCount = document.getElementById("catchCount");
-  let count = 0;
+  const moleGrid = document.getElementById("moleGrid");
+  const moleStatus = document.getElementById("moleStatus");
+  const holes = [];
+  let hits = 0;
+  let agreeIndex = -1;
+  let trapIndex = -1;
 
-  const moveButton = () => {
-    const maxX = Math.max(0, zone.clientWidth - btn.offsetWidth - 2);
-    const maxY = Math.max(0, zone.clientHeight - btn.offsetHeight - 2);
-    btn.style.left = `${Math.floor(Math.random() * (maxX + 1))}px`;
-    btn.style.top = `${Math.floor(Math.random() * (maxY + 1))}px`;
+  for (let index = 0; index < 9; index += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "mole-hole";
+    button.textContent = "대기";
+    button.addEventListener("click", () => {
+      if (index === agreeIndex) {
+        hits += 1;
+        moleStatus.textContent = `포착 ${hits}/6`;
+        tone(520 + hits * 20, 0.03, "triangle", 0.03);
+        if (hits >= 6) {
+          completeStage("이제 절단 순서를 지켜 와이어를 끊으세요.");
+          return;
+        }
+        rotateHoles();
+        return;
+      }
+
+      if (index === trapIndex) {
+        failGame("거절 버튼을 눌렀습니다.");
+      }
+    });
+    holes.push(button);
+    moleGrid.appendChild(button);
+  }
+
+  const paintHoles = () => {
+    holes.forEach((hole, index) => {
+      hole.className = "mole-hole";
+      hole.textContent = "대기";
+      if (index === agreeIndex) {
+        hole.classList.add("mole-hole--agree");
+        hole.textContent = "동의";
+      }
+      if (index === trapIndex) {
+        hole.classList.add("mole-hole--trap");
+        hole.textContent = "거절";
+      }
+    });
   };
 
-  const dodge = () => {
-    if (count < 4) {
-      moveButton();
-      tone(300 + Math.random() * 120, 0.02, "triangle", 0.02);
+  const rotateHoles = () => {
+    agreeIndex = randomInt(0, holes.length - 1);
+    trapIndex = Math.random() > 0.55 ? randomInt(0, holes.length - 1) : -1;
+    while (trapIndex === agreeIndex) {
+      trapIndex = randomInt(0, holes.length - 1);
     }
+    paintHoles();
   };
 
-  btn.addEventListener("pointerenter", dodge);
-  btn.addEventListener("touchstart", dodge, { passive: true });
-  btn.addEventListener("click", () => {
-    count += 1;
-    catchCount.textContent = String(count);
-    if (count >= 4) {
-      completeStage("집중 확인 단계로 이동합니다.");
-      return;
-    }
-    moveButton();
-  });
-
-  setPrimaryButton("버튼을 직접 눌러야 함", null, true, "btn--ghost");
+  const moleTimer = setInterval(rotateHoles, 620);
+  rotateHoles();
+  addCleanup(() => clearInterval(moleTimer));
+  setPrimaryButton("패널 내부 버튼으로 진행", null, true, "btn--ghost");
 }
 
 function renderStage6() {
+  const order = shuffleArray([
+    { id: "red", label: "RED" },
+    { id: "blue", label: "BLUE" },
+    { id: "yellow", label: "YELLOW" },
+    { id: "green", label: "GREEN" }
+  ]);
+  let step = 0;
+
   stageArea.innerHTML = `
     <div class="card">
-      <p>항목이 순차적으로 사라지기 전에 6개를 모두 체크하세요.</p>
-      <div class="grid-2" id="checkGrid"></div>
+      <p>보안 와이어를 순서대로 절단하세요. 잘못 자르면 즉시 시스템이 잠깁니다.</p>
+      <div class="badge">절단 순서: ${order.map((wire) => wire.label).join(" → ")}</div>
+      <div class="wire-stack" id="wireStack"></div>
+      <p class="small" id="wireStatus">절단 진행 0/4</p>
     </div>
   `;
 
-  const items = ["알림 권한", "저장소 접근", "접근성 보조", "클립보드 읽기", "백그라운드 활동", "동기화 최적화"];
-  const checkGrid = document.getElementById("checkGrid");
+  const wireStack = document.getElementById("wireStack");
+  const wireStatus = document.getElementById("wireStatus");
+  const wires = shuffleArray(order);
 
-  items.forEach((item, idx) => {
-    const row = document.createElement("label");
-    row.className = "checkbox-row";
-    row.innerHTML = `<input type="checkbox" data-i="${idx}">${item}`;
-    checkGrid.appendChild(row);
-  });
-
-  const boxes = [...checkGrid.querySelectorAll("input")];
-
-  boxes.forEach((box, idx) => {
-    const hideTimer = setTimeout(() => {
-      if (!box.checked) {
-        box.disabled = true;
-        box.closest("label").style.opacity = "0.35";
+  wires.forEach((wire) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `wire wire--${wire.id}`;
+    button.textContent = `${wire.label} CUT`;
+    button.addEventListener("click", () => {
+      if (wire.id !== order[step].id) {
+        failGame("와이어 절단 순서가 틀렸습니다.");
+        return;
       }
-    }, 1500 + idx * 720);
-    addCleanup(() => clearTimeout(hideTimer));
+
+      button.disabled = true;
+      button.classList.add("wire--cut");
+      step += 1;
+      wireStatus.textContent = `절단 진행 ${step}/4`;
+      tone(300 + step * 120, 0.04, "square", 0.03);
+      if (step >= order.length) {
+        completeStage("숨겨진 승인 버튼을 버튼 미로에서 찾으세요.");
+      }
+    });
+    wireStack.appendChild(button);
   });
 
-  const validate = () => {
-    const allChecked = boxes.every((box) => box.checked);
-    setPrimaryButton("모두 선택 후 진행", () => completeStage("함정 버튼을 조심하세요."), !allChecked, "btn--primary");
-  };
-
-  boxes.forEach((box) => box.addEventListener("change", validate));
-  validate();
+  setPrimaryButton("패널 내부 버튼으로 진행", null, true, "btn--ghost");
 }
 
 function renderStage7() {
-  stageArea.innerHTML = `
-    <div class="card" style="position:relative; min-height:250px;">
-      <button class="btn btn--danger giant" id="disagreeBtn" type="button">동의하지 않음</button>
-      <button class="btn btn--primary hidden-agree" id="realAgree" type="button">진짜 동의</button>
-      <div class="flash" id="flashLayer"></div>
-      <p class="small">거대한 버튼은 미끼입니다.</p>
-    </div>
-  `;
-
-  const disagreeBtn = document.getElementById("disagreeBtn");
-  const realAgree = document.getElementById("realAgree");
-  const flash = document.getElementById("flashLayer");
-
-  const blink = () => {
-    flash.classList.add("on");
-    tone(72, 0.15, "sawtooth", 0.04);
-    vibrate([110, 40, 110]);
-    setTimeout(() => flash.classList.remove("on"), 130);
-  };
-
-  disagreeBtn.addEventListener("click", () => {
-    blink();
-    failGame("함정 버튼을 눌렀습니다.");
-  });
-
-  realAgree.addEventListener("click", () => {
-    completeStage("권한 순서를 맞추세요.");
-  });
-
-  setPrimaryButton("화면 내 버튼으로 진행", null, true, "btn--ghost");
-}
-
-function renderStage8() {
-  const target = ["필수 기능", "서비스 운영", "보안/사고 대응", "분석/개선", "마케팅"];
-  const shuffled = [...target].sort(() => Math.random() - 0.5);
+  const labels = shuffleArray([
+    { text: "계속", real: false },
+    { text: "확인", real: false },
+    { text: "허용", real: false },
+    { text: "보류", real: false },
+    { text: "차단", real: false },
+    { text: "취소", real: false },
+    { text: "승인", real: true },
+    { text: "유지", real: false },
+    { text: "무시", real: false },
+    { text: "삭제", real: false }
+  ]);
+  let scrambleCount = 0;
 
   stageArea.innerHTML = `
     <div class="card">
-      <p>아래 항목을 우선순서대로 위에서 아래 순서로 정렬하세요.</p>
-      <ul class="sort-list" id="sortList"></ul>
-      <p class="small">목표 순서: 필수 기능 → 서비스 운영 → 보안/사고 대응 → 분석/개선 → 마케팅</p>
+      <p>버튼 미로 어딘가에 있는 진짜 승인 버튼을 찾으세요. 가짜를 누르면 전부 다시 섞입니다.</p>
+      <div class="button-maze" id="buttonMaze"></div>
+      <p class="small" id="mazeStatus">허수 클릭 0회</p>
     </div>
   `;
 
-  const sortList = document.getElementById("sortList");
-  shuffled.forEach((item) => {
-    const li = document.createElement("li");
-    li.className = "sort-item";
-    li.draggable = true;
-    li.textContent = item;
-    sortList.appendChild(li);
+  const buttonMaze = document.getElementById("buttonMaze");
+  const mazeStatus = document.getElementById("mazeStatus");
+  const slots = [
+    { x: 4, y: 8 }, { x: 35, y: 10 }, { x: 68, y: 8 },
+    { x: 10, y: 34 }, { x: 42, y: 30 }, { x: 72, y: 38 },
+    { x: 2, y: 62 }, { x: 34, y: 62 }, { x: 63, y: 66 }, { x: 76, y: 84 }
+  ];
+
+  const buttons = labels.map((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `maze-button${item.real ? " maze-button--real" : ""}`;
+    button.textContent = item.text;
+    button.addEventListener("click", () => {
+      if (item.real) {
+        completeStage("세 개의 다이얼을 목표 수치에 맞추세요.");
+        return;
+      }
+
+      scrambleCount += 1;
+      mazeStatus.textContent = `허수 클릭 ${scrambleCount}회 · 버튼 재배치`;
+      tone(160, 0.05, "sawtooth", 0.03);
+      layoutButtons();
+    });
+    buttonMaze.appendChild(button);
+    return button;
   });
 
-  let dragSrc = null;
-
-  const validate = () => {
-    const now = [...sortList.querySelectorAll(".sort-item")].map((x) => x.textContent);
-    const ok = now.every((text, i) => text === target[i]);
-    setPrimaryButton("정렬 완료 후 동의", () => completeStage("팝업 폭주를 정리하세요."), !ok, "btn--primary");
+  const layoutButtons = () => {
+    const nextSlots = shuffleArray(slots);
+    buttons.forEach((button, index) => {
+      const slot = nextSlots[index % nextSlots.length];
+      button.style.left = `${slot.x}%`;
+      button.style.top = `${slot.y}%`;
+    });
   };
 
-  sortList.addEventListener("dragstart", (event) => {
-    const targetEl = event.target.closest(".sort-item");
-    if (!targetEl) {
-      return;
+  requestAnimationFrame(layoutButtons);
+  setPrimaryButton("패널 내부 버튼으로 진행", null, true, "btn--ghost");
+}
+
+function renderStage8() {
+  const targets = [randomInt(15, 30), randomInt(48, 68), randomInt(70, 88)];
+  const values = [randomInt(0, 100), randomInt(0, 100), randomInt(0, 100)];
+
+  stageArea.innerHTML = `
+    <div class="card">
+      <p>세 개의 승인 다이얼을 목표 수치에 맞추세요. 각 수치에서 ±3 안이면 잠금이 해제됩니다.</p>
+      <div class="slider-bank" id="sliderBank"></div>
+      <p class="small" id="dialStatus">세 다이얼 모두 목표값에 맞춰야 합니다.</p>
+    </div>
+  `;
+
+  const sliderBank = document.getElementById("sliderBank");
+  const dialStatus = document.getElementById("dialStatus");
+
+  const validate = () => {
+    const ok = values.every((value, index) => Math.abs(value - targets[index]) <= 3);
+    dialStatus.textContent = `현재 값: ${values.join(" / ")} · 목표: ${targets.join(" / ")}`;
+    if (ok) {
+      completeStage("팝업 폭주 속 함정 버튼을 피해 정리하세요.");
     }
-    dragSrc = targetEl;
-    targetEl.classList.add("dragging");
+  };
+
+  values.forEach((value, index) => {
+    const card = document.createElement("div");
+    card.className = "slider-card";
+    card.innerHTML = `
+      <span class="hero-kicker">Dial ${index + 1}</span>
+      <strong>Target ${targets[index]}</strong>
+      <input class="dial-input" type="range" min="0" max="100" value="${value}">
+      <span class="small" id="dialValue${index}">${value}</span>
+    `;
+    const input = card.querySelector("input");
+    const valueText = card.querySelector(`#dialValue${index}`);
+    input.addEventListener("input", () => {
+      values[index] = Number(input.value);
+      valueText.textContent = input.value;
+      validate();
+    });
+    sliderBank.appendChild(card);
   });
 
-  sortList.addEventListener("dragend", (event) => {
-    const targetEl = event.target.closest(".sort-item");
-    if (!targetEl) {
-      return;
-    }
-    targetEl.classList.remove("dragging");
-  });
-
-  sortList.addEventListener("dragover", (event) => {
-    event.preventDefault();
-    const over = event.target.closest(".sort-item");
-    if (!dragSrc || !over || over === dragSrc) {
-      return;
-    }
-    const rect = over.getBoundingClientRect();
-    const placeAfter = event.clientY > rect.top + rect.height / 2;
-    if (placeAfter) {
-      over.after(dragSrc);
-    } else {
-      over.before(dragSrc);
-    }
-  });
-
-  sortList.addEventListener("drop", validate);
   validate();
+  setPrimaryButton("다이얼 정렬 필요", null, true, "btn--ghost");
 }
 
 function renderStage9() {
   state.closedPopups = 0;
   stageArea.innerHTML = `
-    <div class="card" style="position:relative; min-height:260px;">
-      <p>가짜 시스템 팝업 4개를 모두 닫아야 진짜 동의 버튼이 열립니다.</p>
-      <span class="badge" id="popupBadge">0/4</span>
+    <div class="card card--popup-stage" style="position:relative; min-height:360px;">
+      <p>팝업을 빠르게 정리하세요. 대부분은 확인 버튼이지만, 한 개는 같은 모양의 함정 버튼이 섞여 있습니다. 함정 팝업은 본문 버튼 대신 ×로 닫아야 합니다.</p>
+      <span class="badge" id="popupBadge">0/10</span>
       <div class="popup-layer" id="popupLayer"></div>
     </div>
   `;
@@ -579,24 +991,38 @@ function renderStage9() {
   const popupLayer = document.getElementById("popupLayer");
   const popupBadge = document.getElementById("popupBadge");
 
-  const data = [
-    { title: "시스템 알림", body: "배터리가 1% 남았습니다.", left: 8, top: 30 },
-    { title: "전화 수신", body: "알 수 없는 번호로 전화가 왔습니다.", left: 94, top: 126 },
-    { title: "권한 요청", body: "백그라운드 오디오 접근 권한이 필요합니다.", left: 22, top: 196 },
-    { title: "업데이트", body: "보안 패치가 필요합니다. 즉시 동의하세요.", left: 128, top: 48 }
-  ];
+  const trapIndex = randomInt(0, 9);
+  const availableLayers = shuffleArray([1, 2, 3, 4, 6, 7, 8, 9, 10]);
+  const data = Array.from({ length: 10 }, (_, index) => ({
+    title: index === trapIndex ? randomChoice(["권한 확인", "세션 확인", "상태 확인"]) : randomChoice(["시스템 알림", "업데이트", "오류 보고", "권한 요청"]),
+    body: index === trapIndex ? randomChoice([
+      "승인 상태를 다시 확인합니다.",
+      "세션 유지를 위해 버튼을 눌러 주세요.",
+      "채널 점검을 위해 즉시 응답해 주세요."
+    ]) : randomChoice([
+      "임시 캐시 정리가 필요합니다.",
+      "세션 무결성 확인 중입니다.",
+      "백그라운드 점검이 진행 중입니다.",
+      "알림 채널 상태를 재동기화합니다."
+    ]),
+    left: index === trapIndex ? randomInt(42, 92) : randomInt(4, 146),
+    top: index === trapIndex ? randomInt(78, 150) : randomInt(18, 228),
+    zIndex: index === trapIndex ? 5 : availableLayers.pop(),
+    trap: index === trapIndex
+  }));
 
   data.forEach((item, idx) => {
     const popup = document.createElement("div");
     popup.className = "popup";
     popup.style.left = `${item.left}px`;
     popup.style.top = `${item.top}px`;
+    popup.style.zIndex = String(item.zIndex);
     popup.innerHTML = `
       <div class="popup__title">${item.title}</div>
       <div class="popup__body">${item.body}</div>
       <div class="popup__actions">
-        <button class="popup__btn popup__btn--close" type="button">닫기</button>
-        <button class="popup__btn popup__btn--ok" type="button">확인</button>
+        <button class="popup__btn popup__btn--close" type="button">×</button>
+        <button class="popup__btn ${item.trap ? "popup__btn--trap" : "popup__btn--ok"}" type="button">${item.trap ? "거부" : "확인"}</button>
       </div>
     `;
 
@@ -606,14 +1032,21 @@ function renderStage9() {
       }
       popup.remove();
       state.closedPopups += 1;
-      popupBadge.textContent = `${state.closedPopups}/4`;
+      popupBadge.textContent = `${state.closedPopups}/10`;
       tone(420 + idx * 50, 0.03, "triangle", 0.02);
-      const done = state.closedPopups >= 4;
-      setPrimaryButton("진짜 동의", () => completeStage("기억 시퀀스 단계입니다."), !done, "btn--primary");
+      if (state.closedPopups >= 10) {
+        completeStage("기억 시퀀스 단계입니다.");
+      }
     };
 
     popup.querySelector(".popup__btn--close").addEventListener("click", close);
-    popup.querySelector(".popup__btn--ok").addEventListener("click", close);
+    popup.querySelector(`.${item.trap ? "popup__btn--trap" : "popup__btn--ok"}`).addEventListener("click", () => {
+      if (item.trap) {
+        failGame("함정 팝업의 '동의 안함' 버튼을 눌렀습니다.");
+        return;
+      }
+      close();
+    });
     popupLayer.appendChild(popup);
   });
 
@@ -670,17 +1103,19 @@ function renderStage10() {
 }
 
 function renderStage11() {
-  const rows = [
-    { text: "서비스 제공을 위한 최소 정보 처리에 동의합니다.", decoy: false },
-    { text: "기기 마이크를 상시 활성화합니다.", decoy: true },
-    { text: "보안 로그 생성에 동의합니다.", decoy: false },
-    { text: "연락처 전체를 자동 업로드합니다.", decoy: true },
-    { text: "이용 기록의 익명 통계 처리에 동의합니다.", decoy: false },
-    { text: "카메라를 백그라운드에서 무제한 사용합니다.", decoy: true }
-  ];
+  const rows = shuffleArray([
+    { text: "서비스 제공을 위한 최소한의 계정 정보 처리에 동의합니다.", decoy: false },
+    { text: "기기 마이크를 상시 활성화하고 모든 음성을 수집합니다.", decoy: true },
+    { text: "장애 대응 및 보안 점검을 위한 운영 로그 저장에 동의합니다.", decoy: false },
+    { text: "연락처 전체를 주기적으로 서버에 자동 업로드합니다.", decoy: true },
+    { text: "서비스 개선을 위한 이용 기록의 익명 통계 처리에 동의합니다.", decoy: false },
+    { text: "카메라를 백그라운드에서 제한 없이 계속 사용합니다.", decoy: true }
+  ]);
 
   stageArea.innerHTML = `
-    <div class="card" id="decoyWrap"></div>
+    <div class="card" id="decoyWrap">
+      <p class="small">정상적인 서비스 운영 범위의 동의 3개만 선택하세요. 과도한 상시 수집 문구는 미끼입니다.</p>
+    </div>
   `;
 
   const decoyWrap = document.getElementById("decoyWrap");
@@ -712,90 +1147,177 @@ function renderStage11() {
 function renderStage12() {
   stageArea.innerHTML = `
     <div class="card">
-      <p>모든 항목을 검토했으며, 최종 동의 시 결과가 확정됩니다.</p>
-      <p class="small">버튼을 1.8초 이상 길게 눌러야 최종 동의가 완료됩니다.</p>
+      <p>최종 승인 봉인을 1 → 2 → 3 → 4 순으로 해제하세요. 이후 4초 동안 이동하는 최종 승인 버튼을 3번 연속 포착해야 합니다.</p>
+      <div class="seal-field" id="sealField"></div>
       <div class="result" id="finalResult">
         <strong>최종 선택 대기</strong>
-        <span>버튼을 길게 눌러 결말을 확인하세요.</span>
+        <span>봉인을 순서대로 해제하세요.</span>
       </div>
     </div>
   `;
 
-  setPrimaryButton("길게 눌러 동의", null, false, "btn--danger");
+  setPrimaryButton("봉인 해제 필요", null, true, "btn--ghost");
 
-  let holdTimer = null;
-  let holding = false;
+  const sealField = document.getElementById("sealField");
+  const finalResult = document.getElementById("finalResult");
+  const slots = [
+    { x: 8, y: 16 },
+    { x: 58, y: 14 },
+    { x: 24, y: 48 },
+    { x: 68, y: 54 },
+    { x: 14, y: 78 },
+    { x: 56, y: 78 }
+  ];
+  let sequence = 1;
+  let finalTimer = null;
+  let moveTimer = null;
+  let finalHits = 0;
 
-  const onStartHold = () => {
-    if (holding || primaryButton.disabled) {
+  const finishRun = async () => {
+    let cameraMessage = "카메라 권한 요청이 지원되지 않는 환경입니다.";
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach((track) => track.stop());
+        cameraMessage = "카메라 권한 확인 완료";
+      } catch {
+        cameraMessage = "카메라 권한이 거부되어 텍스트 결말로 진행";
+      }
+    }
+
+    const elapsed = Math.round((Date.now() - state.startedAt) / 1000);
+    const best = Number(localStorage.getItem(scoreKey) || "0");
+    if (!best || elapsed < best) {
+      localStorage.setItem(scoreKey, String(elapsed));
+    }
+
+    const bestNow = Number(localStorage.getItem(scoreKey) || elapsed);
+    syncBestRecord();
+    appRoot.dataset.screen = "complete";
+    setThreat("success", "Cleared");
+    finalResult.innerHTML = `
+      <strong>동의 완료</strong>
+      <p>${cameraMessage}</p>
+      <p>이번 기록: ${elapsed}초 · 최고 기록: ${bestNow}초</p>
+    `;
+
+    stopStageTimer();
+    setHint("엔딩 도달. 다시 시작해서 더 빠른 기록을 노려보세요.");
+    setPrimaryButton("처음부터 다시", () => startGame(), false, "btn--primary");
+    tone(840, 0.16, "triangle", 0.04);
+    vibrate([80, 40, 80, 40, 160]);
+  };
+
+  const renderSeal = () => {
+    sealField.innerHTML = "";
+    const nextSlots = shuffleArray(slots);
+
+    if (sequence <= 4) {
+      const correctSlot = nextSlots[0];
+      const decoySlots = nextSlots.slice(1, 3);
+      const correctButton = document.createElement("button");
+      correctButton.type = "button";
+      correctButton.className = "seal-button";
+      correctButton.textContent = `봉인 ${sequence}`;
+      correctButton.style.left = `${correctSlot.x}%`;
+      correctButton.style.top = `${correctSlot.y}%`;
+      correctButton.addEventListener("click", () => {
+        tone(500 + sequence * 90, 0.04, "triangle", 0.03);
+        sequence += 1;
+        finalResult.innerHTML = `
+          <strong>봉인 해제 ${sequence - 1}/4</strong>
+          <span>${sequence <= 4 ? `${sequence}번째 봉인을 찾으세요.` : "최종 승인 추적 단계가 시작됩니다."}</span>
+        `;
+        renderSeal();
+      });
+      sealField.appendChild(correctButton);
+
+      decoySlots.forEach((slot, index) => {
+        const decoy = document.createElement("button");
+        decoy.type = "button";
+        decoy.className = "seal-button seal-button--decoy";
+        decoy.textContent = `오류 ${index + 1}`;
+        decoy.style.left = `${slot.x}%`;
+        decoy.style.top = `${slot.y}%`;
+        decoy.addEventListener("click", () => failGame("가짜 봉인을 눌렀습니다."));
+        sealField.appendChild(decoy);
+      });
       return;
     }
-    holding = true;
-    primaryButton.textContent = "유지 중...";
-    holdTimer = setTimeout(async () => {
-      setPrimaryButton("처리 중...", null, true, "btn--ghost");
-      let cameraMessage = "카메라 권한 요청이 지원되지 않는 환경입니다.";
 
-      if (navigator.mediaDevices?.getUserMedia) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-          stream.getTracks().forEach((track) => track.stop());
-          cameraMessage = "카메라 권한 확인 완료";
-        } catch {
-          cameraMessage = "카메라 권한이 거부되어 텍스트 결말로 진행";
-        }
-      }
+    finalHits = 0;
+    finalResult.innerHTML = `
+      <strong>최종 승인 추적 0/3</strong>
+      <span>움직이는 승인 버튼을 3번 연속 포착하세요.</span>
+    `;
 
-      const elapsed = Math.round((Date.now() - state.startedAt) / 1000);
-      const best = Number(localStorage.getItem(scoreKey) || "0");
-      if (!best || elapsed < best) {
-        localStorage.setItem(scoreKey, String(elapsed));
-      }
+    const finalButton = document.createElement("button");
+    finalButton.type = "button";
+    finalButton.className = "seal-button seal-button--final";
+    finalButton.textContent = "승인";
 
-      const bestNow = Number(localStorage.getItem(scoreKey) || elapsed);
-      const finalResult = document.getElementById("finalResult");
+    const decoys = ["취소", "거부"].map((label) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "seal-button seal-button--decoy";
+      button.textContent = label;
+      button.addEventListener("click", () => failGame("최종 승인 단계에서 함정을 눌렀습니다."));
+      sealField.appendChild(button);
+      return button;
+    });
+
+    const placeFinalButtons = () => {
+      const positions = shuffleArray(slots).slice(0, 3);
+      [finalButton, ...decoys].forEach((button, index) => {
+        button.style.left = `${positions[index].x}%`;
+        button.style.top = `${positions[index].y}%`;
+      });
+    };
+
+    finalButton.addEventListener("click", () => {
+      finalHits += 1;
+      tone(720 + finalHits * 40, 0.04, "triangle", 0.03);
       finalResult.innerHTML = `
-        <strong>동의 완료</strong>
-        <p>${cameraMessage}</p>
-        <p>이번 기록: ${elapsed}초 · 최고 기록: ${bestNow}초</p>
+        <strong>최종 승인 추적 ${finalHits}/3</strong>
+        <span>${finalHits >= 3 ? "승인 완료 처리 중" : "계속 추적하세요."}</span>
       `;
-
-      stopStageTimer();
-      setHint("엔딩 도달. 다시 시작해서 더 빠른 기록을 노려보세요.");
-      setPrimaryButton("처음부터 다시", () => startGame(), false, "btn--primary");
-      tone(840, 0.16, "triangle", 0.04);
-      vibrate([80, 40, 80, 40, 160]);
-    }, 1800);
-  };
-
-  const onEndHold = () => {
-    if (!holding) {
-      return;
-    }
-    holding = false;
-    if (holdTimer) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
-      if (primaryButton.textContent === "유지 중...") {
-        primaryButton.textContent = "길게 눌러 동의";
+      if (finalHits >= 3) {
+        if (finalTimer) {
+          clearTimeout(finalTimer);
+        }
+        if (moveTimer) {
+          clearInterval(moveTimer);
+        }
+        finishRun();
+        return;
       }
-    }
+      placeFinalButtons();
+    });
+
+    sealField.appendChild(finalButton);
+    placeFinalButtons();
+    moveTimer = setInterval(placeFinalButtons, 420);
+    finalTimer = setTimeout(() => failGame("최종 승인 추적에 실패했습니다."), 4000);
+    addCleanup(() => {
+      if (moveTimer) {
+        clearInterval(moveTimer);
+      }
+      if (finalTimer) {
+        clearTimeout(finalTimer);
+      }
+    });
   };
 
-  primaryButton.addEventListener("mousedown", onStartHold);
-  primaryButton.addEventListener("touchstart", onStartHold, { passive: true });
-  primaryButton.addEventListener("mouseup", onEndHold);
-  primaryButton.addEventListener("mouseleave", onEndHold);
-  primaryButton.addEventListener("touchend", onEndHold);
-  primaryButton.addEventListener("touchcancel", onEndHold);
-
-  addCleanup(() => {
-    onEndHold();
-    primaryButton.removeEventListener("mousedown", onStartHold);
-    primaryButton.removeEventListener("touchstart", onStartHold);
-    primaryButton.removeEventListener("mouseup", onEndHold);
-    primaryButton.removeEventListener("mouseleave", onEndHold);
-    primaryButton.removeEventListener("touchend", onEndHold);
-    primaryButton.removeEventListener("touchcancel", onEndHold);
-  });
+  renderSeal();
 }
+
+renderIntro();
+registerServiceWorker();
+lockViewportZoom();
+syncVersionLabels();
+setupInstallPrompt();
+
+window.addEventListener("load", () => {
+  setTimeout(hideSplashScreen, 900);
+});
