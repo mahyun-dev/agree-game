@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이용약관에 동의하고 싶어</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="bg-canvas" aria-hidden="true">
+        <span class="orb orb--1"></span>
+        <span class="orb orb--2"></span>
+        <span class="grid"></span>
+    </div>
+
+    <main class="app" id="appRoot">
+        <section class="phone-shell" aria-live="polite">
+            <header class="top-bar">
+                <div class="top-bar__left">약관 동의 센터</div>
+                <div class="top-bar__right" id="difficultyLabel">난이도 1/10</div>
+            </header>
+
+            <section class="status-panel">
+                <p class="brand-eyebrow">SURVIVAL PROTOCOL</p>
+                <h1 id="stageTitle">이용약관에 동의하고 싶어</h1>
+                <p id="stageSubtitle">아래 조건을 충족하면 다음 단계로 이동합니다.</p>
+                <div class="hud-row">
+                    <div class="hud-chip" id="stageChip">Stage 1</div>
+                    <div class="hud-chip hud-chip--timer" id="timerChip">남은 시간 24.0초</div>
+                </div>
+                <div class="progress-wrap" role="progressbar" aria-valuemin="1" aria-valuemax="12" aria-valuenow="1">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+            </section>
+
+            <section id="stageArea" class="stage-area"></section>
+
+            <footer class="action-bar">
+                <p class="hint" id="hintText">시작하려면 버튼을 눌러 주세요.</p>
+                <div class="action-row">
+                    <button id="primaryButton" class="btn btn--primary" type="button">게임 시작</button>
+                </div>
+            </footer>
+        </section>
+    </main>
+
+    <p class="disclaimer">※ 본 콘텐츠는 게임 연출이며 실제 약관/개인정보 수집이 아닙니다.</p>
+
+    <script type="module" src="scripts/app.js"></script>
+</body>
+</html>
