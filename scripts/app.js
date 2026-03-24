@@ -1,6 +1,6 @@
 import { STAGES } from "./stages.js";
 
-const APP_VERSION = "v2026.03.24-3";
+const APP_VERSION = "v2026.03.24-02";
 
 const appRoot = document.getElementById("appRoot");
 const stageTitle = document.getElementById("stageTitle");
@@ -9,16 +9,11 @@ const stageArea = document.getElementById("stageArea");
 const hintText = document.getElementById("hintText");
 const primaryButton = document.getElementById("primaryButton");
 const progressBar = document.getElementById("progressBar");
-const difficultyLabel = document.getElementById("difficultyLabel");
 const progressWrap = document.querySelector(".progress-wrap");
-const stageChip = document.getElementById("stageChip");
-const timerChip = document.getElementById("timerChip");
-const recordValue = document.getElementById("recordValue");
-const missionValue = document.getElementById("missionValue");
-const threatValue = document.getElementById("threatValue");
+const liveBuildChip = document.getElementById("liveBuildChip");
+const timerBadge = document.getElementById("timerBadge");
 const splashScreen = document.getElementById("splashScreen");
 const splashVersion = document.getElementById("splashVersion");
-const versionBadge = document.getElementById("versionBadge");
 const installEyebrow = document.getElementById("installEyebrow");
 const installHeadline = document.getElementById("installHeadline");
 const installDescription = document.getElementById("installDescription");
@@ -32,6 +27,7 @@ const dismissInstallButton = document.getElementById("dismissInstallButton");
 const state = {
   stageIndex: -1,
   cleanup: [],
+  stageCleared: false,
   startedAt: 0,
   closedPopups: 0,
   resetting: false,
@@ -67,22 +63,22 @@ primaryButton.addEventListener("click", () => {
 
 function startGame() {
   state.resetting = false;
+  state.stageCleared = false;
   state.startedAt = Date.now();
-  missionValue.textContent = String(STAGES.length);
   goToStage(0);
 }
 
 function goToStage(index) {
   clearStageEffects();
   state.stageIndex = index;
+  state.stageCleared = false;
   const stage = STAGES[index];
   appRoot.dataset.screen = "stage";
   stageArea.dataset.mechanic = stage.mechanic;
   stageTitle.textContent = stage.title;
   stageSubtitle.textContent = stage.subtitle;
   setHint(stage.hint);
-  difficultyLabel.textContent = `난이도 ${stage.id}/12`;
-  stageChip.textContent = `제${stage.id}조`;
+  liveBuildChip.textContent = `LIVE BUILD · 제${stage.id}조`;
   progressWrap.setAttribute("aria-valuenow", String(stage.id));
   progressWrap.setAttribute("aria-valuemax", String(STAGES.length));
   progressBar.style.width = `${(stage.id / STAGES.length) * 100}%`;
@@ -114,14 +110,8 @@ function clearStageEffects() {
   stageArea.classList.remove("glitch");
 }
 
-function setThreat(level, label) {
+function setThreat(level) {
   appRoot.dataset.threat = level;
-  threatValue.textContent = label;
-}
-
-function syncBestRecord() {
-  const best = Number(localStorage.getItem(scoreKey) || "0");
-  recordValue.textContent = best ? `${best}s` : "--";
 }
 
 function addCleanup(fn) {
@@ -141,6 +131,11 @@ function setPrimaryButton(label, onClick, disabled, variant) {
 }
 
 function completeStage(nextHint) {
+  if (state.stageCleared) {
+    return;
+  }
+
+  state.stageCleared = true;
   stopStageTimer();
   setThreat("success", "Cleared");
   tone(680, 0.05, "triangle", 0.04);
@@ -153,8 +148,8 @@ function completeStage(nextHint) {
 function startStageTimer(limitSec) {
   stopStageTimer();
   if (!limitSec || limitSec <= 0) {
-    timerChip.textContent = "시간 제한 없음";
-    timerChip.classList.remove("danger");
+    timerBadge.textContent = "시간 제한 없음";
+    timerBadge.classList.remove("danger");
     setThreat("idle", "Stable");
     return;
   }
@@ -164,12 +159,12 @@ function startStageTimer(limitSec) {
   const tick = () => {
     const remainMs = state.stageEndsAt - Date.now();
     const remain = Math.max(0, remainMs / 1000);
-    timerChip.textContent = `남은 시간 ${remain.toFixed(1)}초`;
+    timerBadge.textContent = `남은 시간 ${remain.toFixed(1)}초`;
     if (remain <= 5) {
-      timerChip.classList.add("danger");
+      timerBadge.classList.add("danger");
       setThreat("danger", "Critical");
     } else {
-      timerChip.classList.remove("danger");
+      timerBadge.classList.remove("danger");
       setThreat("active", remain <= 9 ? "High" : "Amber");
     }
 
@@ -217,19 +212,17 @@ function failGame(reason) {
 
 function renderIntro() {
   state.stageIndex = -1;
+  state.stageCleared = false;
   appRoot.dataset.screen = "intro";
   stageArea.dataset.mechanic = "intro";
   stageTitle.textContent = "Consent Crisis";
   stageSubtitle.textContent = "12개의 기만적인 동의 절차를 제한 시간 안에 돌파하는 아케이드 서바이벌.";
-  difficultyLabel.textContent = "브리핑 대기";
-  stageChip.textContent = "서문";
-  timerChip.textContent = "시스템 대기 중";
-  timerChip.classList.remove("danger");
+  liveBuildChip.textContent = "LIVE BUILD · LOBBY";
+  timerBadge.textContent = "시스템 대기 중";
+  timerBadge.classList.remove("danger");
   progressWrap.setAttribute("aria-valuenow", "0");
   progressWrap.setAttribute("aria-valuemax", String(STAGES.length));
   progressBar.style.width = "0%";
-  missionValue.textContent = String(STAGES.length);
-  syncBestRecord();
   setThreat("idle", "Amber");
   setHint("시작 버튼을 누르면 12개의 동의 함정이 순서대로 활성화됩니다.");
   stageArea.innerHTML = `
@@ -307,7 +300,6 @@ function randomChoice(items) {
 
 function syncVersionLabels() {
   splashVersion.textContent = APP_VERSION;
-  versionBadge.textContent = APP_VERSION;
   installVersion.textContent = APP_VERSION;
 }
 
@@ -541,7 +533,11 @@ function lockViewportZoom() {
 }
 
 function renderStage1() {
-  const target = shuffleArray([true, true, false, true]);
+  const onCount = randomInt(1, 4);
+  const target = shuffleArray([
+    ...Array.from({ length: onCount }, () => true),
+    ...Array.from({ length: 4 - onCount }, () => false)
+  ]);
 
   stageArea.innerHTML = `
     <div class="card">
@@ -1039,7 +1035,13 @@ function renderStage9() {
       }
     };
 
-    popup.querySelector(".popup__btn--close").addEventListener("click", close);
+    popup.querySelector(".popup__btn--close").addEventListener("click", () => {
+      if (item.trap) {
+        close();
+        return;
+      }
+      failGame("정상 팝업에서 × 버튼을 눌렀습니다.");
+    });
     popup.querySelector(`.${item.trap ? "popup__btn--trap" : "popup__btn--ok"}`).addEventListener("click", () => {
       if (item.trap) {
         failGame("함정 팝업의 '동의 안함' 버튼을 눌렀습니다.");
@@ -1193,7 +1195,6 @@ function renderStage12() {
     }
 
     const bestNow = Number(localStorage.getItem(scoreKey) || elapsed);
-    syncBestRecord();
     appRoot.dataset.screen = "complete";
     setThreat("success", "Cleared");
     finalResult.innerHTML = `

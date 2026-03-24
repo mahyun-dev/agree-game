@@ -78,20 +78,20 @@ export const STAGES = [
     hint: "숫자 시퀀스를 기억",
     mechanic: "memory-sequence",
     timeLimit: 9
-  },
+  },  
   {
     id: 11,
     title: "제11조 · 위장 약관",
     subtitle: "진짜 항목만 선택해야 합니다. 미끼를 누르는 순간 시스템이 종료됩니다.",
     hint: "진짜 동의 문구만 선택",
     mechanic: "decoy-consent",
-    timeLimit: 9
+    timeLimit: 12
   },
   {
     id: 12,
     title: "제12조 · 오버라이드 씰",
-    subtitle: "봉인 3개를 순서대로 해제하고, 잠깐 열리는 최종 승인 창을 눌러야 합니다.",
-    hint: "봉인 1→2→3 후 최종 승인 클릭",
+    subtitle: "봉인 4개를 순서대로 해제하고, 이후 4초 동안 이동하는 최종 승인 버튼을 3번 연속 포착해야 합니다.",
+    hint: "봉인 1→2→3→4 후 최종 승인 3번 연속 클릭",
     mechanic: "final-consent",
     timeLimit: 15
   }

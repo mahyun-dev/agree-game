@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0b0c0e">
     <meta name="background-color" content="#0b0c0e">
-    <meta name="description" content="이용약관에 동의하고 싶어는 약관 동의를 소재로 한 고난도 웹 퍼즐 호러 게임입니다.">
+    <meta name="description" content="이용약관에 동의하고 싶어는 약관 동의를 소재로 한 고난도 웹 퍼즐 게임입니다.">
     <meta name="application-name" content="이용약관에 동의하고 싶어">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -53,26 +53,11 @@
                     <div class="title-row">
                         <h1 id="stageTitle">Consent Crisis</h1>
                         <div class="title-row__chips">
-                            <span class="status-pill">LIVE BUILD</span>
-                            <span class="status-pill status-pill--version" id="versionBadge">v0.0.0</span>
+                            <span class="status-pill" id="liveBuildChip">LIVE BUILD · LOBBY</span>
+                            <span class="status-pill status-pill--timer" id="timerBadge">시스템 대기 중</span>
                         </div>
                     </div>
                     <p id="stageSubtitle">12개의 기만적인 동의 절차를 제한 시간 안에 돌파하는 아케이드 서바이벌.</p>
-                </div>
-
-                <div class="mission-hud">
-                    <div class="hud-panel">
-                        <span class="hud-panel__label">Status</span>
-                        <strong id="difficultyLabel">브리핑 대기</strong>
-                    </div>
-                    <div class="hud-panel">
-                        <span class="hud-panel__label">Mission</span>
-                        <strong id="stageChip">LOBBY</strong>
-                    </div>
-                    <div class="hud-panel hud-panel--timer">
-                        <span class="hud-panel__label">Timer</span>
-                        <strong id="timerChip">시스템 대기 중</strong>
-                    </div>
                 </div>
             </header>
 
@@ -81,54 +66,7 @@
             </div>
 
             <section class="battlefield">
-                <aside class="intel-column" aria-label="게임 정보 패널">
-                    <div class="intel-card intel-card--accent">
-                        <span class="intel-card__label">Best Record</span>
-                        <strong class="intel-card__value" id="recordValue">--</strong>
-                        <p class="small">가장 빠른 생존 기록</p>
-                    </div>
-                    <div class="intel-card">
-                        <span class="intel-card__label">Missions</span>
-                        <strong class="intel-card__value" id="missionValue">12</strong>
-                        <p class="small">연속 함정 스테이지</p>
-                    </div>
-                    <div class="intel-card">
-                        <span class="intel-card__label">Threat Level</span>
-                        <strong class="intel-card__value" id="threatValue">Amber</strong>
-                        <p class="small">남은 시간과 실패 상태에 따라 변동</p>
-                    </div>
-                </aside>
-
-                <section id="stageArea" class="stage-area">
-                    <div class="intro-screen">
-                        <div class="intro-screen__hero card card--hero">
-                            <p class="hero-kicker">MISSION BRIEFING</p>
-                            <h2>읽는 게임이 아니라, 버티는 게임.</h2>
-                            <p>
-                                가짜 약관, 함정 버튼, 기억 시험, 팝업 폭주를 통과해 최종 동의까지 살아남으세요.
-                                깔끔한 앱처럼 보이지만 실제로는 반응 속도와 집중력을 시험하는 서바이벌 퍼즐입니다.
-                            </p>
-                            <div class="hero-tags">
-                                <span class="hero-tag">12 STAGES</span>
-                                <span class="hero-tag">TIME ATTACK</span>
-                                <span class="hero-tag">DARK UX HORROR</span>
-                            </div>
-                        </div>
-
-                        <div class="intro-screen__grid">
-                            <article class="card card--brief">
-                                <p class="hero-kicker">Core Loop</p>
-                                <strong>보고, 피하고, 기억하고, 견뎌야 합니다.</strong>
-                                <p class="small">각 스테이지는 다른 심리 압박을 사용합니다. 체크박스 하나도 방심하면 바로 초기화됩니다.</p>
-                            </article>
-                            <article class="card card--brief">
-                                <p class="hero-kicker">Player Fantasy</p>
-                                <strong>유저가 "이거 디자인 멋있다"고 느끼는 위협적인 UI</strong>
-                                <p class="small">시작 화면부터 게임 로비처럼 보이고, 진행할수록 시스템이 오염되는 듯한 연출로 몰입감을 만듭니다.</p>
-                            </article>
-                        </div>
-                    </div>
-                </section>
+                <section id="stageArea" class="stage-area"></section>
             </section>
 
             <footer class="action-bar">
